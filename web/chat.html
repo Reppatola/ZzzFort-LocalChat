@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>ZzzFort — Chat</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; height: 100vh; display: flex; flex-direction: column; }
+  header { background: #161b22; padding: 10px 20px; border-bottom: 1px solid #30363d; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; font-weight: 500; }
+  select { background: #21262d; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+  select:focus { outline: none; border-color: #1f6feb; }
+  select:disabled { opacity: 0.5; cursor: wait; }
+  #status { font-size: 12px; color: #7d8590; }
+  #status.ok { color: #3fb950; }
+  #status.err { color: #f85149; }
+  #status.loading { color: #d29922; }
+  #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .msg { max-width: 800px; padding: 12px 16px; border-radius: 8px; white-space: pre-wrap; word-wrap: break-word; line-height: 1.5; }
+  .user { background: #1f6feb; align-self: flex-end; }
+  .assistant { background: #21262d; align-self: flex-start; }
+  .system { background: #2d333b; color: #d29922; align-self: center; font-size: 13px; padding: 8px 14px; border-radius: 6px; }
+  footer { background: #161b22; padding: 12px 20px; border-top: 1px solid #30363d; display: flex; gap: 10px; }
+  textarea { flex: 1; background: #0d1117; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px; padding: 10px; font-family: inherit; font-size: 14px; resize: none; min-height: 44px; max-height: 150px; }
+  textarea:focus { outline: none; border-color: #1f6feb; }
+  button { background: #238636; color: white; border: none; border-radius: 6px; padding: 0 20px; font-size: 14px; cursor: pointer; }
+  button:hover { background: #2ea043; }
+  button:disabled { background: #484f58; cursor: not-allowed; }
+  button.clear { background: #6e7681; padding: 6px 12px; font-size: 13px; }
+  button.clear:hover { background: #8b949e; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 ZzzFort</h1>
+  <select id="modelSelect" onchange="switchModel(this.value)">
+    <option>Loading models...</option>
+  </select>
+  <span id="status">Checking...</span>
+  <div style="flex:1"></div>
+  <button class="clear" onclick="clearHistory()">Clear</button>
+</header>
+
+<div id="messages"></div>
+
+<footer>
+  <textarea id="input" placeholder="Type a message... (Enter — send, Shift+Enter — new line)" rows="1"></textarea>
+  <button id="send" onclick="send()">Send</button>
+</footer>
+
+<script>
+const MANAGER = 'http://127.0.0.1:8090';
+const LLAMA_PORT = 8082;
+let activeModel = null;
+let history = [];
+let switching = false;
+
+// --- Status ---
+function setStatus(text, cls) {
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.className = cls || '';
+}
+
+// --- Models ---
+async function loadModels() {
+  try {
+    const r = await fetch(MANAGER + '/models', { signal: AbortSignal.timeout(3000) });
+    const data = await r.json();
+    const sel = document.getElementById('modelSelect');
+    sel.innerHTML = '';
+    for (const m of data.models) {
+      const opt = document.createElement('option');
+      opt.value = m.name;
+      opt.textContent = m.name;
+      sel.appendChild(opt);
+    }
+    return data.models;
+  } catch (e) {
+    setStatus('❌ Manager unavailable', 'err');
+    return [];
+  }
+}
+
+async function refreshStatus() {
+  try {
+    const r = await fetch(MANAGER + '/status', { signal: AbortSignal.timeout(3000) });
+    const data = await r.json();
+    if (data.running && data.active) {
+      activeModel = data.active;
+      document.getElementById('modelSelect').value = activeModel;
+      setStatus('✅ ' + activeModel, 'ok');
+    } else {
+      activeModel = null;
+      setStatus('⚠️ No model loaded', 'loading');
+    }
+  } catch (e) {
+    setStatus('❌ Manager unavailable', 'err');
+  }
+}
+
+// --- Model switching ---
+async function switchModel(modelName) {
+  if (!modelName || switching || modelName === activeModel) return;
+  switching = true;
+  const sel = document.getElementById('modelSelect');
+  sel.disabled = true;
+  const btn = document.getElementById('send');
+  btn.disabled = true;
+
+  addSystem('Switching to ' + modelName + '... This may take up to a minute.');
+  setStatus('⏳ Loading ' + modelName + '...', 'loading');
+
+  try {
+    const r = await fetch(MANAGER + '/switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelName }),
+      signal: AbortSignal.timeout(120000)
+    });
+    const data = await r.json();
+    if (data.status === 'ok') {
+      activeModel = modelName;
+      setStatus('✅ ' + modelName, 'ok');
+      addSystem('Model ' + modelName + ' loaded.');
+    } else {
+      setStatus('❌ ' + (data.message || 'Error'), 'err');
+      addSystem('Switch error: ' + (data.message || 'unknown'));
+    }
+  } catch (e) {
+    setStatus('❌ Switch timeout', 'err');
+    addSystem('Failed to switch model: ' + e.message);
+  } finally {
+    sel.disabled = false;
+    btn.disabled = false;
+    switching = false;
+  }
+}
+
+// --- Messages ---
+function addMessage(role, content) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.textContent = content;
+  document.getElementById('messages').appendChild(div);
+  document.getElementById('messages').scrollTop = 999999;
+  return div;
+}
+
+function addSystem(text) {
+  const div = document.createElement('div');
+  div.className = 'msg system';
+  div.textContent = text;
+  document.getElementById('messages').appendChild(div);
+  document.getElementById('messages').scrollTop = 999999;
+}
+
+// --- Send ---
+async function send() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text) return;
+  if (switching) { alert('Please wait, model is still loading'); return; }
+  if (!activeModel) {
+    addSystem('No model loaded. Wait or select a model.');
+    return;
+  }
+
+  input.value = '';
+  input.style.height = 'auto';
+  addMessage('user', text);
+  history.push({ role: 'user', content: text });
+
+  const btn = document.getElementById('send');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  const assistantDiv = addMessage('assistant', '');
+
+  try {
+    const resp = await fetch(`http://127.0.0.1:${LLAMA_PORT}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: activeModel,
+        messages: history,
+        stream: true,
+        max_tokens: 2048
+      })
+    });
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullReply = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') continue;
+          try {
+            const json = JSON.parse(data);
+            const delta = json.choices?.[0]?.delta?.content || '';
+            if (delta) {
+              fullReply += delta;
+              assistantDiv.textContent = fullReply;
+              document.getElementById('messages').scrollTop = 999999;
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    history.push({ role: 'assistant', content: fullReply });
+    saveHistory();
+  } catch (e) {
+    assistantDiv.textContent = '❌ Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  }
+}
+
+// --- History ---
+function saveHistory() {
+  try { localStorage.setItem('zzzfort_history', JSON.stringify(history)); } catch (e) {}
+}
+function loadHistory() {
+  try {
+    const saved = localStorage.getItem('zzzfort_history');
+    if (saved) {
+      history = JSON.parse(saved);
+      for (const m of history) addMessage(m.role, m.content);
+    }
+  } catch (e) {}
+}
+function clearHistory() {
+  if (!confirm('Clear all chat history?')) return;
+  history = [];
+  localStorage.removeItem('zzzfort_history');
+  document.getElementById('messages').innerHTML = '';
+}
+
+// --- Handlers ---
+const input = document.getElementById('input');
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+});
+
+// --- Init ---
+(async function init() {
+  loadHistory();
+  const models = await loadModels();
+  await refreshStatus();
+  if (!activeModel && models.length > 0) {
+    addSystem('No model loaded. Select one in the dropdown above.');
+  }
+})();
+</script>
+
+</body>
+</html>

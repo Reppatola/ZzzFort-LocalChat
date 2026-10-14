@@ -1,0 +1,97 @@
+# ===== Models (huge, regenerate from MODELS.md) =====
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+
+# ===== Compiled binaries =====
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+*.a
+*.lib
+
+# ===== llama.cpp build output =====
+src-llama/
+build/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# ===== Python virtual environment =====
+venv/
+.venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# ===== Caches =====
+.cache/
+.cache_huggingface/
+.cache_ollama/
+.cache_llama/
+*.tmp
+*.temp
+
+# ===== Logs =====
+*.log
+logs/
+
+# ===== User data (chat history, sessions) =====
+history.json
+sessions/
+kv_cache/
+*.session
+
+# ===== Backups =====
+backup/
+*_backup_*.zip
+*_backup_*.7z
+*_backup_*.rar
+
+# ===== Windows OS files =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# ===== macOS (if repo is ever used on Mac) =====
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ===== IDE / editors =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# ===== Secrets / local config =====
+.env
+.env.local
+*.secret
+config.local.json
+api_keys.txt
+
+# ===== Project-specific =====
+# Our models folder — big files, regenerate via docs/MODELS.md
+models/
+# Our compiled llama-server and its DLLs — regenerate via docs/BUILD.md
+bin/
+# The whole runtime workspace (not part of repo)
+ZzzFort/

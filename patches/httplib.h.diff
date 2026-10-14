@@ -1,0 +1,15 @@
+--- a/vendor/cpp-httplib/httplib.h
++++ b/vendor/cpp-httplib/httplib.h
+@@ -13,10 +13,10 @@
+ 
+ #ifdef _WIN32
+-#if defined(_WIN32_WINNT) && _WIN32_WINNT < 0x0A00
+-#error                                                                         \
+-    "cpp-httplib doesn't support Windows 8 or lower. Please use Windows 10 or later."
+-#endif
++// #if defined(_WIN32) && _WIN32_WINNT < 0x0A00
++// #error "cpp-httplib doesn't support Windows 8 or lower. Please use Windows 10 or later."
++// #endif
+ #endif
+ 
+ /*

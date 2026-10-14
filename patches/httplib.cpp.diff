@@ -1,0 +1,11 @@
+--- a/vendor/cpp-httplib/httplib.cpp
++++ b/vendor/cpp-httplib/httplib.cpp
+@@ -1620,8 +1620,9 @@
+   hFile_ = ::CreateFile2(wpath.c_str(), GENERIC_READ,
+-                         FILE_SHARE_READ | FILE_SHARE_WRITE, OPEN_EXISTING, NULL);
++  hFile_ = ::CreateFileW(wpath.c_str(), GENERIC_READ,
++                         FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
++                         FILE_ATTRIBUTE_READONLY, NULL);
+ #else
+   hFile_ = ::CreateFileW(wpath.c_str(), GENERIC_READ,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
